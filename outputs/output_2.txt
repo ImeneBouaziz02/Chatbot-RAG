@@ -1,0 +1,79 @@
+=================================================================
+=========================== OUTPUT1 =============================
+=================================================================
+
+✅ Importations réussies!
+✅ Variables configurées!
+✅ Connexion à Supabase réussie!
+✅ Extension pgvector est active!
+✅ Ollama est opérationnel!
+✅ Importations réussies!     
+✅ Variables configurées!     
+✅ Connexion à Supabase réussie!
+✅ Extension pgvector est active!
+✅ Ollama est opérationnel!   
+✅ 4 documents extraits       
+Premier document: Dernière    
+utilisation recensée du corpus : Rasmus Persson (U. Lund,   
+Sweden)...
+✅ Embedding généré! Dimension: 768
+Premiers valeurs: [0.4796556532382965, 0.6209191679954529, -3.442446231842041, -1.5036942958831787, 1.4530071020126343] 
+✅ Fonction save_embedding définie!
+🗑️ Table supprimée si elle existait
+✅ Extension vector activée   
+✅ Table 'embeddings' créée avec pgvector
+
+📥 Insertion de 4 documents...
+Traitement 4/4...
+✅ 4 documents insérés avec succès!
+🔍 Résultats pour: 'Quelle est l'importance de l'éducation?'
+
+ID: 4 | Similarité: 0.6357    
+Texte: Important - Par        
+ailleurs, malgré tout le soin porté à
+l'anonymation des locuteurs, cette
+ressource peut intégrer des échanges dont la
+communication po...
+
+ID: 3 | Similarité: 0.6232    
+Texte: -    SA :
+partage des
+conditions initiales à l’identique  -
+Vous ne pouvez créer une nouvelle ressource à
+partir de la ressource existante
+et en faire...
+
+ID: 1 | Similarité: 0.6194    
+Texte: Dernière
+utilisation recensée du corpus : Rasmus Persson (U. Lund,   
+Sweden)...
+
+
+============================================================
+🤖 CHATBOT RAG avec Ollama - Tapez 'quit' pour quitter      
+============================================================
+
+Vous: De quoi parle ce corpus de documents ?
+
+🤖 Chatbot: Ce corpus de documents semble traiter des questions relatives à la condition d'utilisation et aux règles de partage pour les ressources créées à partir du corpus. Il spécifie que l'usage de la ressource existante ne peut être modifié ou transformé sans accord préalable avec les auteurs originaux, mais est ouvert aux nouvelles utilisations qui pourraient découler d'une utilisation originale du corpus.     
+
+Vous: Qui a gagné la Coupe du Monde 2022 ?
+
+🤖 Chatbot: Je ne trouve pas cette information dans les documents fournis.
+
+Vous: Quelle est l'importance de l'éducation selon ces textes ?
+
+🤖 Chatbot: Je ne trouve pas cette information dans les documents fournis. Les textes traitent spécifiquement de l'anonymisation des locuteurs de parole publique, des conditions d'utilisation du corpus et des règles de citation des auteurs, mais il n'y a aucune mention de l'éducation.
+
+Vous: quit
+👋 Au revoir!
+📊 Statistiques de la base de données:
+  - Nombre de documents: 4
+  - Dimension des embeddings: 768
+  - Modèle d'embedding: nomic-embed-text
+  - Modèle de génération: llama3.2
+  - Exemple: Dernière
+utilisation recensée du corpus : Rasmus Persson (U. Lund,   
+Sweden)...
+
+✅ Notebook terminé avec succès avec Ollama!

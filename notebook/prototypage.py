@@ -1,7 +1,8 @@
+
 import os
 import psycopg
 from pgvector.psycopg import register_vector
-import google.generativeai as genai
+import ollama
 from dotenv import load_dotenv
 import requests
 from bs4 import BeautifulSoup
@@ -9,16 +10,12 @@ from bs4 import BeautifulSoup
 # Charger les variables d'environnement
 load_dotenv('../src/.env')
 
-# Configurer Gemini
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-genai.configure(api_key=GEMINI_API_KEY)
-
 print("✅ Importations réussies!")
+
 
 # Chaîne de connexion
 db_connection_str = f"dbname={os.getenv('DB_NAME')} user={os.getenv('DB_USER')} password={os.getenv('DB_PASSWORD')} host={os.getenv('DB_HOST')} port={os.getenv('DB_PORT')}"
 
-# Paramètres de connexion (alternative)
 conn_params = {
     'dbname': os.getenv('DB_NAME'),
     'user': os.getenv('DB_USER'),
@@ -27,10 +24,12 @@ conn_params = {
     'port': os.getenv('DB_PORT')
 }
 
-# Modèle d'embedding Gemini
-EMBEDDING_MODEL = "models/embedding-001"
-# Dimension des embeddings Gemini (768)
+# Modèle d'embedding Ollama (768 dimensions)
+EMBEDDING_MODEL = "nomic-embed-text"
 EMBEDDING_DIM = 768
+
+# Modèle de génération
+LLM_MODEL = "llama3.2"
 
 print("✅ Variables configurées!")
 
@@ -45,38 +44,37 @@ try:
         result = cur.fetchone()
         if result:
             print("✅ Extension pgvector est active!")
-        else:
-            print("⚠️ Extension pgvector n'est pas installée. Exécutez: CREATE EXTENSION vector;")
     
     conn.close()
 except Exception as e:
     print(f"❌ Erreur de connexion: {e}")
 
+# Vérifier qu'Ollama fonctionne
+try:
+    ollama.list()
+    print("✅ Ollama est opérationnel!")
+except Exception as e:
+    print(f"❌ Ollama n'est pas démarré. Lancez-le puis réessayez.")
 
 def create_conversation_list(url: str = None, file_path: str = None) -> list[str]:
     """
     Télécharge et extrait le corpus depuis une URL ou un fichier local
     """
     if url:
-        # Télécharger depuis l'URL
         response = requests.get(url)
         response.encoding = 'utf-8'
         text = response.text
     elif file_path:
-        # Lire depuis un fichier local
         with open(file_path, "r", encoding='utf-8') as file:
             text = file.read()
     else:
         raise ValueError("Vous devez fournir soit une URL, soit un file_path")
     
-    # Parser avec BeautifulSoup
     soup = BeautifulSoup(text, 'html.parser')
     
-    # Extraire les paragraphes
     corpus_list = []
     for p in soup.find_all('p'):
         text = p.get_text().strip()
-        # Nettoyer et filtrer
         if len(text) > 50 and not text.startswith("<"):
             text = text.removeprefix("     ")
             corpus_list.append(text)
@@ -84,7 +82,7 @@ def create_conversation_list(url: str = None, file_path: str = None) -> list[str
     print(f"✅ {len(corpus_list)} documents extraits")
     return corpus_list
 
-# Test
+# Télécharger le corpus
 conversation_url = "https://www.info.univ-tours.fr/~antoine/parole_publique/Accueil_UBS/index.html"
 corpus_list = create_conversation_list(url=conversation_url)
 print(f"Premier document: {corpus_list[0][:100]}...")
@@ -92,21 +90,19 @@ print(f"Premier document: {corpus_list[0][:100]}...")
 
 def calculate_embeddings(corpus: str) -> list[float]:
     """
-    Génère un embedding avec Gemini
+    Génère un embedding avec Ollama (local)
     """
-    result = genai.embed_content(
+    response = ollama.embeddings(
         model=EMBEDDING_MODEL,
-        content=corpus,
-        task_type="retrieval_document"
+        prompt=corpus
     )
-    return result['embedding']
+    return response['embedding']
 
 # Test
 test_text = "Ceci est un test pour vérifier les embeddings."
 test_embedding = calculate_embeddings(test_text)
 print(f"✅ Embedding généré! Dimension: {len(test_embedding)}")
 print(f"Premiers valeurs: {test_embedding[:5]}")
-
 
 def save_embedding(corpus: str, embedding: list[float], cursor) -> None:
     """
@@ -118,22 +114,17 @@ def save_embedding(corpus: str, embedding: list[float], cursor) -> None:
     )
 
 print("✅ Fonction save_embedding définie!")
-
-# Créer la table et insérer les embeddings
 with psycopg.connect(db_connection_str) as conn:
     conn.autocommit = True
     register_vector(conn)
     
     with conn.cursor() as cur:
-        # Supprimer la table si elle existe
         cur.execute("""DROP TABLE IF EXISTS embeddings""")
         print("🗑️ Table supprimée si elle existait")
         
-        # Créer l'extension pgvector
         cur.execute("""CREATE EXTENSION IF NOT EXISTS vector""")
         print("✅ Extension vector activée")
         
-        # Créer la table avec pgvector
         cur.execute(f"""
             CREATE TABLE IF NOT EXISTS embeddings (
                 id SERIAL PRIMARY KEY, 
@@ -143,7 +134,7 @@ with psycopg.connect(db_connection_str) as conn:
         """)
         print("✅ Table 'embeddings' créée avec pgvector")
         
-        # Insérer les documents (limiter pour le test)
+        # Insérer les documents
         sample_size = min(20, len(corpus_list))
         print(f"\n📥 Insertion de {sample_size} documents...")
         
@@ -155,18 +146,12 @@ with psycopg.connect(db_connection_str) as conn:
         conn.commit()
         print(f"\n✅ {sample_size} documents insérés avec succès!")
 
-
 def similar_corpus(input_corpus: str, db_connection_str: str, top_k: int = 3) -> list[tuple]:
     """
     Trouve les documents les plus similaires à l'entrée
-    
-    Returns:
-        Liste de tuples (id, corpus, similarity)
     """
-    # Générer l'embedding de la requête
     query_embedding = calculate_embeddings(input_corpus)
     
-    # Rechercher dans la base
     with psycopg.connect(db_connection_str) as conn:
         register_vector(conn)
         with conn.cursor() as cur:
@@ -190,10 +175,9 @@ for id, text, similarity in results:
     print(f"ID: {id} | Similarité: {similarity:.4f}")
     print(f"Texte: {text[:150]}...\n")
 
-
 def generate_response(query: str, db_connection_str: str) -> str:
     """
-    Génère une réponse en utilisant l'architecture RAG
+    Génère une réponse en utilisant l'architecture RAG avec Ollama
     """
     # 1. Récupérer les documents pertinents
     relevant_docs = similar_corpus(query, db_connection_str, top_k=3)
@@ -215,25 +199,27 @@ Instructions:
 
 Réponse:"""
     
-    # 4. Générer la réponse avec Gemini
-    model = genai.GenerativeModel('gemini-pro')
-    response = model.generate_content(prompt)
+    # 4. Générer la réponse avec Ollama
+    response = ollama.generate(
+        model=LLM_MODEL,
+        prompt=prompt
+    )
     
-    return response.text
+    return response['response']
 
-# Test de génération
-question = "Quels sont les principaux thèmes abordés dans les discours?"
-print(f"❓ Question: {question}\n")
+# Test de génération (output_1.txt)
+# question = "Quels sont les principaux thèmes abordés dans les discours?"
+# print(f"❓ Question: {question}\n")
 
-reponse = generate_response(question, db_connection_str)
-print(f"🤖 Réponse:\n{reponse}")
+# reponse = generate_response(question, db_connection_str)
+# print(f"🤖 Réponse:\n{reponse}")
 
 def chatbot_loop():
     """
     Boucle interactive pour tester le chatbot
     """
     print("\n" + "="*60)
-    print("🤖 CHATBOT RAG - Tapez 'quit' pour quitter")
+    print("🤖 CHATBOT RAG avec Ollama - Tapez 'quit' pour quitter")
     print("="*60 + "\n")
     
     while True:
@@ -252,22 +238,23 @@ def chatbot_loop():
         except Exception as e:
             print(f"❌ Erreur: {e}\n")
 
-# Décommenter pour lancer le chatbot interactif
-# chatbot_loop()
+# Décommenter pour lancer le chatbot interactif (output_2.txt)
+chatbot_loop()
+
 
 with psycopg.connect(db_connection_str) as conn:
     with conn.cursor() as cur:
-        # Compter les documents
         cur.execute("SELECT COUNT(*) FROM embeddings")
         count = cur.fetchone()[0]
         
-        # Exemple de document
         cur.execute("SELECT id, corpus FROM embeddings LIMIT 1")
         sample = cur.fetchone()
         
         print("📊 Statistiques de la base de données:")
         print(f"  - Nombre de documents: {count}")
         print(f"  - Dimension des embeddings: {EMBEDDING_DIM}")
-        print(f"  - Exemple de document (ID {sample[0]}): {sample[1][:100]}...")
+        print(f"  - Modèle d'embedding: {EMBEDDING_MODEL}")
+        print(f"  - Modèle de génération: {LLM_MODEL}")
+        print(f"  - Exemple: {sample[1][:100]}...")
 
-print("\n✅ Notebook terminé avec succès!")
+print("\n✅ Notebook terminé avec succès avec Ollama!")
